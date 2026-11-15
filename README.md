@@ -1,34 +1,26 @@
-# llm-infra-lab
+# AI-Native Handbook —— 企业 AI 岗位手册
 
-LLM 基础设施 / 推理优化 / 评测的实验工具箱——来自一台 RTX 4060 Laptop 8GB (WSL2) 上的实战沉淀。
+AI-Native 企业的岗位学习手册与实践参考。三个岗位，三卷手册，同一套底座认知。
 
-## 板块导航
+> 配套阅读：[awesome-ai-native](https://github.com/vicfei/awesome-ai-native) —— 论点驱动的 AI-Native 企业地图（转型原则、组织形态、一手文献）。手册管"怎么做"，地图管"为什么与往哪去"。
 
-| 目录 | 内容 | 亮点 |
-|---|---|---|
-| `models/` | 模型结构学习手册（真实 checkpoint 解剖） | Qwen3.5-0.8B 逐张量权重普查（0.87B 账目闭合）；"每 token 读全量权重"的完整推导；GDN vs 全注意力对照 |
-| `infra/` | WSL2 上跑 vLLM/CUDA 的环境配方 | `VLLM_WSL2_ENABLE_PIN_MEMORY=1` 这一隐藏开关的定位过程 |
-| `inference/` | 量化工具链 + 基准测试 | llmcompressor 0.14 新 API 七轮排坑定稿脚本；8GB 卡上 4B 模型的完整方案矩阵 |
-| `eval/` | lm-eval 评测管线 + 结果 | 概率型任务接 vLLM 的正确姿势；三模型速度×质量对比数据 |
-| `nanovllm-kernel/` | nano-vllm kernel 学习材料 | 唯一自写 Triton kernel 的独立单测（含 2.1x 性能对照） |
+## 卷目
 
-## 核心结论速览（详见各板块笔记）
-
-**8GB 卡跑 4B 模型（Qwen3-4B-Instruct-2507, vLLM v0.29）：**
-
-| 方案 | 显存 | 输出吞吐 | GSM8K 质量 |
+| 卷 | 读者 | 内容 | 状态 |
 |---|---|---|---|
-| BF16 直跑 | 7.6G | ❌ 装不下 | — |
-| BF16 + cpu-offload | 4G | 7 tok/s（慢 46 倍，仅保命） | — |
-| **INT8 (W8A8)** | **4.2G** | **203 tok/s** | **88%（与原版 90% 无显著差异）→ 推荐档** |
-| W4A16 | 2.5G | 324 tok/s（并发翻倍） | 74%（数学任务真实退化）→ 吞吐档 |
+| [vol1-infra/](vol1-infra/) | 基础设施 / 推理优化岗 | 模型结构学习手册（checkpoint 解剖、Roofline、GDN 混合架构）；量化工具链与基准；vLLM 部署配方；kernel 学习材料 | ✅ 已有内容（自原 llm-infra-lab 并入，历史保留） |
+| [vol2-agent-dev/](vol2-agent-dev/) | Agent 应用开发岗 | 企业级 RAG（开源平台二开、Java 端对接、企业部署）；企业级 Harness（部署与二开）；应用场景开发 | 🚧 骨架就绪，章节陆续迁入 |
+| vol3-org/（远期） | 管理者 / 转型推动者 | 评测驱动的管理、自动化等级、组织改造操作手册 | 📋 规划中 |
 
-## 环境与工具版本
+## 学习路径建议
 
-- vLLM v0.29.0（官方镜像）/ llmcompressor 0.14.0.1 / lm-eval + datasets<3
-- CUDA 12.0（apt nvidia-cuda-toolkit）/ Triton（vLLM 镜像自带）
-- 模型：Qwen3-4B-Instruct-2507（ModelScope 下载）、Qwen3-0.6B
+新员工从 [vol1-infra/models/](vol1-infra/models/) 的四章开始——"每 token 读全量权重"这条因果链是一切推理优化讨论的公共地基；然后按岗位分流：infra 岗走量化/评测/kernel，agent 开发岗走 vol2 的 RAG → Harness → 应用场景。
 
-## 使用姿势
+## 内容来源与发布规范
 
-每个目录内的笔记都是"可直接照抄的命令 + 踩坑定位过程"。量化脚本对任意 HF 格式模型通用（改 `SRC` 路径与 `scheme` 即可）。
+- 内容为一手实践沉淀（真实 checkpoint、真实集群、真实事故），数字可复核；
+- 发布规范见 [PUBLISHING.md](PUBLISHING.md)——一句话版：技术细节完全开放，不出现公司名；凭据（key/密码/token）任何情况下不入库。
+
+## 环境基线
+
+vol1 实验基线：RTX 4060 Laptop 8GB (WSL2) / vLLM v0.29 / llmcompressor 0.14 / lm-eval——8GB 卡是刻意选择：装不下就逼你理解每一个显存字节去哪了。
