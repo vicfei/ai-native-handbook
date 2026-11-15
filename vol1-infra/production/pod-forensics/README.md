@@ -12,12 +12,12 @@ Raw configuration forensics for the four production pods described in [../8xh20-
 
 | File | Pod | Form |
 |---|---|---|
-| `ivs-llm-chat.yaml` | flagship chat (4 GPUs) | Deployment, reconstructed from live cmdline forensics |
-| `ivs-llm-chat-lite.yaml` | high-concurrency lite (2 GPUs) | Deployment, reconstructed from live cmdline forensics |
-| `ivs-llm-multi.yaml` | retrieval pair (1 GPU) | Deployment + original MODELS env (as-found defects annotated inline) |
+| `ivs-llm-chat.yaml` | flagship chat (4 GPUs) | **authentic** deployment export, 2026-11-09 |
+| `ivs-llm-chat-lite.yaml` | high-concurrency lite (2 GPUs) | **authentic** deployment export, 2026-11-09 |
+| `ivs-llm-multi.yaml` | retrieval pair (1 GPU) | **authentic** deployment export, 2026-11-09 (MODELS env as live) |
 | `ivs-llm-file-parser.yaml` | document parser (1 GPU) | **authentic** pod snapshot, original 3-container era (2026-11-06) |
 
-**`raw/` — the evidence layer:** the four verbatim forensic captures (env/cmdline/probes, incl. the MODELS ghost-entry scene) plus the authentic file-parser manifests from the 2026-11-09 replacement (draft, candidate, and the live ACTIVE version).
+**`raw/` — the evidence layer:** the four verbatim forensic captures (env/cmdline/probes, incl. the MODELS ghost-entry scene) plus the authentic file-parser manifests from the 2026-11-09 replacement (draft, candidate, and the live ACTIVE version), and the superseded reconstructions (`*.reconstructed.yaml`) authored before the authentic exports arrived.
 
 ## Sanitization
 

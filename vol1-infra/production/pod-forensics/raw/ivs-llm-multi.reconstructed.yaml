@@ -1,0 +1,73 @@
+# ivs-llm-multi — retrieval pair (Qwen3-Embedding-4B :8002 + Qwen3-Reranker-4B :8003, 1 GPU)
+# Single container, launcher form: PID 1 reads the MODELS env and spawns two vLLM servers.
+# Reconstructed from /proc/1/environ forensics (2026-10-28, see raw/ivs-llm-multi.md).
+# NOTE (as-found defects, kept verbatim as history):
+#  - reranker ran "--task embedding": /v1/rerank scores degraded to cosine similarity
+#    (correct form: --task score + hf_overrides Qwen3ForSequenceClassification trio — see
+#     ../8xh20-four-pod-reference.md section 2)
+#  - a duplicate "reranker" entry (verbatim copy of the embedding entry) existed in the
+#    live env — the launcher deduped by name; scene preserved in raw/
+#  - util 0.45+0.45 + batch 16384 = the OOM-era budget; corrected band 0.40/0.28 + 8192
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ivs-llm-multi
+  labels:
+    le: IVS-ETL-LLM-SERVICE
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
+  template:
+    spec:
+      containers:
+      - name: multi
+        image: registry.internal/ivs-etl/vllm-dynamic:v0.10.1_v1
+        command: ["python3", "/app/launcher.py"]     # supervisor; /health :8000 always 200
+        env:
+        - name: MODELS
+          value: |
+            [
+              {
+                "name": "embedding",
+                "command": ["python3", "-m", "vllm.entrypoints.openai.api_server",
+                  "--model", "/data/models/Qwen3-Embedding-4B",
+                  "--served-model-name", "qwen3-embedding-4b", "embedding",
+                  "--host", "0.0.0.0", "--port", "8002",
+                  "--enable-chunked-prefill", "--enable-prefix-caching",
+                  "--max_model_len", "8192",
+                  "--max_num_batched_tokens", "16384",
+                  "--gpu-memory-utilization", "0.45",
+                  "--task", "embedding"]
+              },
+              {
+                "name": "reranker",
+                "command": ["python3", "-m", "vllm.entrypoints.openai.api_server",
+                  "--model", "/data/models/Qwen3-Reranker-4B",
+                  "--served-model-name", "qwen3-reranker-4b", "reranker",
+                  "--host", "0.0.0.0", "--port", "8003",
+                  "--enable-chunked-prefill", "--enable-prefix-caching",
+                  "--max_model_len", "8192",
+                  "--max_num_batched_tokens", "16384",
+                  "--gpu-memory-utilization", "0.45",
+                  "--task", "embedding"]
+              }
+            ]
+        - name: caas_logs_stdout
+          value: "true"
+        ports:
+        - { name: health,    containerPort: 8000 }
+        - { name: embedding, containerPort: 8002 }
+        - { name: reranker,  containerPort: 8003 }
+        resources:
+          limits: { nvidia.com/gpu: 1 }
+        livenessProbe:                    # audit defect #1: /health is launcher's, always 200
+          tcpSocket: { port: 8000 }
+        volumeMounts:
+        - { name: models, mountPath: /data/models }
+        - { name: dshm,   mountPath: /dev/shm }   # plain emptyDir as found; tmpfs recommended
+      volumes:
+      - name: models
+        nfs: { server: <nas>, path: /models }
+      - name: dshm
+        emptyDir: {}

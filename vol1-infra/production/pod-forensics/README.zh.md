@@ -12,12 +12,12 @@
 
 | 文件 | Pod | 形态 |
 |---|---|---|
-| `ivs-llm-chat.yaml` | 旗舰 chat（4 卡） | Deployment，自实弹 cmdline 取证重建 |
-| `ivs-llm-chat-lite.yaml` | 高并发 lite（2 卡） | Deployment，自实弹 cmdline 取证重建 |
-| `ivs-llm-multi.yaml` | 检索双件（1 卡） | Deployment + 原始 MODELS env（发现时缺陷就地注释） |
+| `ivs-llm-chat.yaml` | 旗舰 chat（4 卡） | **真件**部署导出（2026-11-09） |
+| `ivs-llm-chat-lite.yaml` | 高并发 lite（2 卡） | **真件**部署导出（2026-11-09） |
+| `ivs-llm-multi.yaml` | 检索双件（1 卡） | **真件**部署导出（2026-11-09，MODELS env 实况） |
 | `ivs-llm-file-parser.yaml` | 文档解析（1 卡） | **真件** pod 快照，最初三容器形态（2026-11-06） |
 
-**`raw/`——证据层：** 四份逐字取证（env/cmdline/探针，含 MODELS 残条现场）+ 2026-11-09 替换期的三份真实清单（草案/候选/生效版 ACTIVE）。
+**`raw/`——证据层：** 四份逐字取证（env/cmdline/探针，含 MODELS 残条现场）+ 2026-11-09 替换期的三份真实清单（草案/候选/生效版 ACTIVE）+ 真件到位前的重建版（`*.reconstructed.yaml`，已被真件取代）。
 
 ## 脱敏说明
 

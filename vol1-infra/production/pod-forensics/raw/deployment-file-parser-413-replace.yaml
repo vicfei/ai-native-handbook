@@ -36,7 +36,7 @@ spec:
         # 原 pod 独立键形态原样保留（平台两种形态并存，不引入变化）：
         leafCellType: NVIDIA-H20
         virtualCluster: prop-vc-ai-8gpu
-        serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+        serverless-pool.internal/scheduler-name: hivedscheduler-ds-default
     spec:
       containers:
         # ── 新：MinerU 4.1.3（API+vLLM 一体，接原 sglang 的 GPU 卡位）──

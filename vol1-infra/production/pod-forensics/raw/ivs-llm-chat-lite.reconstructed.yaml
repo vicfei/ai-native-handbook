@@ -1,0 +1,54 @@
+# ivs-llm-chat-lite — high-concurrency lite (Qwen3.8-27B, 2x GPU, TP2, BF16)
+# Reconstructed from live-process forensics (2026-10-28, see raw/ivs-llm-chat-lite.md).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ivs-llm-chat-lite
+  labels:
+    le: IVS-ETL-LLM-SERVICE
+spec:
+  replicas: 1
+  strategy:
+    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+      - name: vllm
+        image: registry.internal/ivs-etl/vllm-docker:v0.25.1   # same build as flagship
+        command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+        args:
+          - --model=/data/models/Qwen3.8-27B
+          - --served-model-name=qwen3.8-27b,lite
+          - --tensor-parallel-size=2
+          - --max-model-len=131072
+          - --max-num-seqs=96                    # 3x flagship: high-concurrency short-request stance
+          - --kv-cache-dtype=fp8_e4m3
+          - --block-size=64
+          - --gpu-memory-utilization=0.92         # audit defect #2: ceiling-high, no load tests
+          - --speculative-config={"method":"mtp","num_speculative_tokens":2}
+          - --mamba-cache-mode=align              # GDN linear-attention layers' state cache mode
+          - --disable-custom-all-reduce
+          - --tool-call-parser=qwen3_coder
+          - --enable-auto-tool-choice
+        env:
+        - name: PYTORCH_ALLOC_CONF                # fragmentation control companion to util 0.92
+          value: expandable_segments:True
+        ports:
+        - { name: http, containerPort: 8000 }
+        resources:
+          limits: { nvidia.com/gpu: 2 }
+        livenessProbe:                            # audit defect #1: liveness-only, 600s guess
+          tcpSocket: { port: 8000 }
+          initialDelaySeconds: 600
+        volumeMounts:
+        - { name: models, mountPath: /data/models }
+        - { name: dshm,   mountPath: /dev/shm }
+      volumes:
+      - name: models
+        nfs: { server: <nas>, path: /models }
+      - name: dshm
+        emptyDir: { medium: Memory }

@@ -1,73 +1,164 @@
-# ivs-llm-multi — retrieval pair (Qwen3-Embedding-4B :8002 + Qwen3-Reranker-4B :8003, 1 GPU)
-# Single container, launcher form: PID 1 reads the MODELS env and spawns two vLLM servers.
-# Reconstructed from /proc/1/environ forensics (2026-10-28, see raw/ivs-llm-multi.md).
-# NOTE (as-found defects, kept verbatim as history):
-#  - reranker ran "--task embedding": /v1/rerank scores degraded to cosine similarity
-#    (correct form: --task score + hf_overrides Qwen3ForSequenceClassification trio — see
-#     ../8xh20-four-pod-reference.md section 2)
-#  - a duplicate "reranker" entry (verbatim copy of the embedding entry) existed in the
-#    live env — the launcher deduped by name; scene preserved in raw/
-#  - util 0.45+0.45 + batch 16384 = the OOM-era budget; corrected band 0.40/0.28 + 8192
+# Authentic deployment export, 2026-11-09 (console dump, byte-faithful); create_user/update_user set to vicfei; registry genericized.
+# ivs-llm-multi（检索模型：qwen3-embedding-4B + qwen3-reranker-4B）
+# 来源：2026-11-09 用户拍照 OCR 还原。OCR 注：llm_model label 只标 embedding 侧；
+# 判读见台账 §12〔附记二·multi 检索后端〕；2026-11-10 审查结论（P1 探针缺陷/P2 监控盲区/
+# P3 dshm+startup 弱点）与当日 reranker OOM 故障分析亦锚此文件。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ivs-llm-multi
+  annotations:
+    deployment.kubernetes.io/revision: "50"
+    pks.internal/description: 多模型服务(仅embedding+reranker)
+  creationTimestamp: "2025-09-09T01:02:52Z"
+  generation: 112
   labels:
+    clustersoft: docker
+    fusion.kmc.internal/workload-class: ""
+    ha: K8S
     le: IVS-ETL-LLM-SERVICE
+    pks.internal/billing-plan: ""
+    pks.internal/create_user: vicfei
+    pks.internal/update_user: vicfei
+    pks.internal/workload-name: ivs-llm-multi
+    pks.internal/workload-type: Deployment
+    sub_sys_code: IVS-ETL
+  name: ivs-llm-multi
+  namespace: ivs-etl-hpc-prd
+  resourceVersion: "73091940799"
+  selfLink: /apis/apps/v1/namespaces/ivs-etl-hpc-prd/deployments/ivs-llm-multi
+  uid: c0f25913-3ea5-423c-81aa-db87683ecd62
 spec:
+  progressDeadlineSeconds: 600
   replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: ivs-llm-multi
   strategy:
-    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
   template:
+    metadata:
+      annotations:
+        hivedscheduler.microsoft.com/pod-scheduling-spec: |
+          leafCellType: NVIDIA-H20
+          virtualCluster: prop-vc-ai-8gpu
+      creationTimestamp: null
+      labels:
+        app: ivs-llm-multi
+        clustersoft: docker
+        ha: K8S
+        le: IVS-ETL-PYTHON-BBG
+        llm_engine: vllm
+        llm_model: qwen3-embedding-4b
+        llm_role: combined
+        pd_group: NOPD
+        pks.internal/create_user: vicfei
+        pks.internal/recreate-revision: 6b947c79db
+        prometheus_port: "8002"
+        prometheus_scheme: http
+        prometheus_scrape: "true"
+        release: ivs-llm-multi
+        sub_sys_code: IVS-ETL
+        transform_type: vllm
     spec:
+      affinity: {}
       containers:
-      - name: multi
-        image: registry.internal/ivs-etl/vllm-dynamic:v0.10.1_v1
-        command: ["python3", "/app/launcher.py"]     # supervisor; /health :8000 always 200
-        env:
-        - name: MODELS
-          value: |
-            [
-              {
-                "name": "embedding",
-                "command": ["python3", "-m", "vllm.entrypoints.openai.api_server",
-                  "--model", "/data/models/Qwen3-Embedding-4B",
-                  "--served-model-name", "qwen3-embedding-4b", "embedding",
-                  "--host", "0.0.0.0", "--port", "8002",
-                  "--enable-chunked-prefill", "--enable-prefix-caching",
-                  "--max_model_len", "8192",
-                  "--max_num_batched_tokens", "16384",
-                  "--gpu-memory-utilization", "0.45",
-                  "--task", "embedding"]
-              },
-              {
-                "name": "reranker",
-                "command": ["python3", "-m", "vllm.entrypoints.openai.api_server",
-                  "--model", "/data/models/Qwen3-Reranker-4B",
-                  "--served-model-name", "qwen3-reranker-4b", "reranker",
-                  "--host", "0.0.0.0", "--port", "8003",
-                  "--enable-chunked-prefill", "--enable-prefix-caching",
-                  "--max_model_len", "8192",
-                  "--max_num_batched_tokens", "16384",
-                  "--gpu-memory-utilization", "0.45",
-                  "--task", "embedding"]
-              }
-            ]
-        - name: caas_logs_stdout
-          value: "true"
-        ports:
-        - { name: health,    containerPort: 8000 }
-        - { name: embedding, containerPort: 8002 }
-        - { name: reranker,  containerPort: 8003 }
-        resources:
-          limits: { nvidia.com/gpu: 1 }
-        livenessProbe:                    # audit defect #1: /health is launcher's, always 200
-          tcpSocket: { port: 8000 }
-        volumeMounts:
-        - { name: models, mountPath: /data/models }
-        - { name: dshm,   mountPath: /dev/shm }   # plain emptyDir as found; tmpfs recommended
+        - env:
+            - name: MODELS
+              value: |
+                [
+                  {
+                    "name": "embedding",
+                    "command": [
+                      "python3", "-m", "vllm.entrypoints.openai.api_server",
+                      "--model", "/data/models/Qwen3-Embedding-4B",
+                      "--served-model-name", "qwen3-embedding-4b", "embedding",
+                      "--host", "0.0.0.0",
+                      "--port", "8002",
+                      "--enable-chunked-prefill",
+                      "--enable-prefix-caching",
+                      "--max_model_len", "8192",
+                      "--max_num_batched_tokens", "16384",
+                      "--gpu-memory-utilization", "0.45",
+                      "--task", "embedding"
+                    ]
+                  },
+                  {
+                    "name": "reranker",
+                    "command": [
+                      "python3", "-m", "vllm.entrypoints.openai.api_server",
+                      "--model", "/data/models/Qwen3-Reranker-4B",
+                      "--served-model-name", "qwen3-reranker-4b", "reranker",
+                      "--host", "0.0.0.0",
+                      "--port", "8003",
+                      "--enable-chunked-prefill",
+                      "--enable-prefix-caching",
+                      "--max_model_len", "8192",
+                      "--max_num_batched_tokens", "16384",
+                      "--gpu-memory-utilization", "0.45",
+                      "--task", "embedding"
+                    ]
+                  }
+                ]
+            - name: caas_logs_stdout
+              value: "true"
+          image: registry.internal/ivs-etl/vllm-dynamic:v0.10.1_v1
+          imagePullPolicy: IfNotPresent
+          lifecycle: {}
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 600
+            periodSeconds: 60
+            successThreshold: 1
+            tcpSocket:
+              port: 8000
+            timeoutSeconds: 5
+          name: ivs-llm-multi
+          resources:
+            limits:
+              cpu: "64"
+              memory: 256Gi
+              nvidia.com/gpu: "1"
+            requests:
+              cpu: "16"
+              memory: 64Gi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data
+              name: ivs-etl-hpc-nas
+            - mountPath: /dev/shm
+              name: dshm
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
       volumes:
-      - name: models
-        nfs: { server: <nas>, path: /models }
-      - name: dshm
-        emptyDir: {}
+        - name: ivs-etl-hpc-nas
+          persistentVolumeClaim:
+            claimName: ivs-etl-hpc-nas
+        - emptyDir: {}
+          name: dshm
+status:
+  availableReplicas: 1
+  conditions:
+    - lastTransitionTime: "2026-03-04T16:27:43Z"
+      lastUpdateTime: "2026-03-04T16:27:43Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2025-09-09T01:02:52Z"
+      lastUpdateTime: "2026-10-19T03:08:52Z"
+      message: ReplicaSet "ivs-llm-multi-546dc7d87f" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+  observedGeneration: 112
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

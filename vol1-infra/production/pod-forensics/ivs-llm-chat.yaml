@@ -1,53 +1,193 @@
-# ivs-llm-chat — flagship chat (DeepSeek-V4-Flash, 4x GPU, TP4+EP)
-# Reconstructed from live-process forensics (2026-10-28 cmdline/env capture, see raw/).
-# Registry domain genericized. Exact flag spellings verifiable in raw/ivs-llm-chat.md.
+# Authentic deployment export, 2026-11-09 (console dump, byte-faithful); create_user/update_user set to vicfei; registry genericized.
+# ivs-llm-chat（生产对话模型 DeepSeek-V4-Flash）
+# 来源：2026-11-09 用户拍照 OCR 还原（终端照片 6 张合并）；OCR 可信度注：结构可信度高，
+# 个别字符有孪生替换可能（如 label "ha: K8S" 疑为还原瑕疵）。
+# 判读结论见台账 §12〔附记·chat 模型 YAML 实锚〕：vllm-docker:v0.25.1（P2 升级对象）、
+# TP4+EP4、dspark 投机×5、上下文硬顶 196608=192K、update_user vicfei。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ivs-llm-chat
+  annotations:
+    deployment.kubernetes.io/revision: "49"
+    pks.internal/description: 满血版模型服务-使用DeepSeek-V4-Flash-0731模型
+  creationTimestamp: "2025-09-09T01:06:34Z"
+  generation: 90
   labels:
-    le: IVS-ETL-LLM-SERVICE        # platform label convention (two-level "le" required)
+    clustersoft: docker
+    fusion.kmc.internal/workload-class: ""
+    ha: K8S
+    le: IVS-ETL-LLM-SERVICE
+    pks.internal/billing-plan: ""
+    pks.internal/create_user: vicfei
+    pks.internal/update_user: vicfei
+    pks.internal/workload-name: ivs-llm-chat
+    pks.internal/workload-type: Deployment
+    sub_sys_code: IVS-ETL
+  name: ivs-llm-chat
+  namespace: ivs-etl-hpc-prd
+  resourceVersion: "73528244787"
+  selfLink: /apis/apps/v1/namespaces/ivs-etl-hpc-prd/deployments/ivs-llm-chat
+  uid: 4c2507b5-b79c-4823-977d-76ebf4f06050
 spec:
+  progressDeadlineSeconds: 3600
   replicas: 1
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: ivs-llm-chat
   strategy:
-    rollingUpdate: { maxSurge: 0, maxUnavailable: 1 }   # platform convention: single replica
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
+    type: RollingUpdate
   template:
     metadata:
       annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8000"
+        hivedscheduler.microsoft.com/pod-scheduling-spec: |
+          leafCellType: NVIDIA-H20
+          virtualCluster: prop-vc-ai-8gpu
+      creationTimestamp: null
+      labels:
+        app: ivs-llm-chat
+        clustersoft: docker
+        ha: K8S
+        le: IVS-ETL-PYTHON-BBG
+        llm_engine: vllm
+        llm_model: deepseek-v4-flash-dspark
+        llm_role: combined
+        pd_group: NOPD
+        pks.internal/create_user: vicfei
+        prometheus_port: "8000"
+        prometheus_scheme: http
+        prometheus_scrape: "true"
+        release: ivs-llm-chat
+        sub_sys_code: IVS-ETL
+        transform_type: vllm
     spec:
+      affinity: {}
       containers:
-      - name: vllm
-        image: registry.internal/ivs-etl/vllm-docker:v0.25.1
-        command: ["python3", "-m", "vllm.entrypoints.openai.api_server"]
-        args:
-          - --model=/data/models/DeepSeek-V4-Flash-0731     # NAS path; dir datestamp = version anchor
-          - --served-model-name=deepseek-v4-flash-dspark,large-max-think,large-think,large
-          - --tensor-parallel-size=4
-          - --enable-expert-parallel
-          - --max-model-len=196608
-          - --max-num-seqs=32
-          - --kv-cache-dtype=fp8
-          - --block-size=256
-          - --gpu-memory-utilization=0.9
-          - --speculative-config={"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"greedy"}
-          - --tool-call-parser=deepseek_v4
-          - --enable-auto-tool-choice
-        env:
-        - name: VLLM_ENGINE_READY_TIMEOUT_S    # cold-start tolerance for large weights
-          value: "3600"
-        ports:
-        - { name: http, containerPort: 8000 }
-        resources:
-          limits: { nvidia.com/gpu: 4 }
-        livenessProbe:                         # audit defect #1: no readiness/startup
-          tcpSocket: { port: 8000 }
-        volumeMounts:
-        - { name: models,  mountPath: /data/models }   # NAS, weights separate from image
-        - { name: dshm,    mountPath: /dev/shm }
+        - command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+            - --model
+            - /data/models/DeepSeek-V4-Flash-0731
+            - --served-model-name
+            - deepseek-v4-flash-dspark
+            - large
+            - --enable-max-think
+            - large-think
+            - large
+            - --trust-remote-code
+            - --dtype
+            - auto
+            - --tensor-parallel-size
+            - "4"
+            - --enable-expert-parallel
+            - --max-model-len
+            - "196608"
+            - --kv-cache-dtype
+            - fp8
+            - --block-size
+            - "256"
+            - --gpu-memory-utilization
+            - "0.9"
+            - --tokenizer-mode
+            - deepseek_v4
+            - --kv-offloading-backend
+            - native
+            - --kv-offloading-size
+            - "64"
+            - --enable-auto-tool-choice
+            - --tool-call-parser
+            - deepseek_v4
+            - --reasoning-parser
+            - deepseek_v4
+            - --speculative-config
+            - '{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"greedy"}'
+            - --max-num-seqs
+            - "32"
+            - --max-num-batched-tokens
+            - "16384"
+            - --enable-chunked-prefill
+            - --enable-prefix-caching
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8000"
+          env:
+            - name: caas_logs_stdout
+              value: "true"
+            - name: VLLM_ENGINE_READY_TIMEOUT_S
+              value: "3600"
+          image: registry.internal/ivs-etl/vllm-docker:v0.25.1
+          imagePullPolicy: IfNotPresent
+          livenessProbe:
+            failureThreshold: 3
+            periodSeconds: 60
+            successThreshold: 1
+            tcpSocket:
+              port: 8000
+            timeoutSeconds: 5
+          name: ivs-llm-chat
+          readinessProbe:
+            failureThreshold: 3
+            periodSeconds: 15
+            successThreshold: 1
+            tcpSocket:
+              port: 8000
+            timeoutSeconds: 5
+          resources:
+            limits:
+              cpu: "256"
+              memory: 1Ti
+              nvidia.com/gpu: "4"
+            requests:
+              cpu: "64"
+              memory: 256Gi
+          startupProbe:
+            failureThreshold: 60
+            periodSeconds: 30
+            successThreshold: 1
+            tcpSocket:
+              port: 8000
+            timeoutSeconds: 5
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /data
+              name: ivs-etl-hpc-nas
+            - mountPath: /dev/shm
+              name: dshm
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 120
       volumes:
-      - name: models
-        nfs: { server: <nas>, path: /models }          # genericized
-      - name: dshm
-        emptyDir: { medium: Memory, sizeLimit: 64Gi }
+        - name: ivs-etl-hpc-nas
+          persistentVolumeClaim:
+            claimName: ivs-etl-hpc-nas
+        - emptyDir:
+            medium: Memory
+            sizeLimit: 64Gi
+          name: dshm
+status:
+  availableReplicas: 1
+  conditions:
+    - lastTransitionTime: "2025-09-09T01:06:34Z"
+      lastUpdateTime: "2025-09-09T01:06:34Z"
+      message: Deployment has minimum availability.
+      reason: MinimumReplicasAvailable
+      status: "True"
+      type: Available
+    - lastTransitionTime: "2025-09-09T01:06:34Z"
+      lastUpdateTime: "2026-10-23T05:51:31Z"
+      message: ReplicaSet "ivs-llm-chat-59c7b69bcf" has successfully progressed.
+      reason: NewReplicaSetAvailable
+      status: "True"
+      type: Progressing
+  observedGeneration: 90
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1

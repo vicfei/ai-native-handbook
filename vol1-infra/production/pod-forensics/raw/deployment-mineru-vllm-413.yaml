@@ -38,7 +38,7 @@ spec:
         hivedscheduler.microsoft.com/pod-scheduling-spec: |
           leafCellType: NVIDIA-H20
           virtualCluster: prop-vc-ai-8gpu
-        serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+        serverless-pool.internal/scheduler-name: hivedscheduler-ds-default
     spec:
       containers:
         - name: mineru-api

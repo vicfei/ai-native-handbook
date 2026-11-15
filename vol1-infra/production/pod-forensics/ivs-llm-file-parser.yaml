@@ -16,7 +16,7 @@ metadata:
     hivedscheduler.microsoft.com/pod-scheduling-spec:
     leafCellType: NVIDIA-H20
     virtualCluster: prop-vc-ai-8gpu
-    serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+    serverless-pool.internal/scheduler-name: hivedscheduler-ds-default
     creationTimestamp: "2026-03-04T16:23:31Z"
   generateName: ivs-llm-file-parser-7cb98fdd4c-
   labels:
@@ -25,7 +25,7 @@ metadata:
     ha:K8S
     kueue.x-k8s.io/workload-replicas: "1"
     le: IVS-ETL-PYTHON-BBG
-    pks.internal/create_user: <operator>
+    pks.internal/create_user: vicfei
     pks.internal/recreate-revision: 6757b8ffb6
     pod-template-hash: 7cb98fdd4c
     sub_sys_code: IVS-ETL
