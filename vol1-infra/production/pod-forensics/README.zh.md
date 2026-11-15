@@ -6,18 +6,18 @@
 
 **出处：** 2026-10-28 自云平台控制台与 pod 终端捕获（`/proc/1/environ`、`cmdline`、实弹探针）——即**进程当时真实在跑的东西**，比部署清单更强的证据（env 可能与 YAML 漂移）。性质为终端输出转写、经 OCR 校对；**非** `kubectl get -o yaml` 导出。
 
-## 文件
+## 目录结构
 
-| 文件 | Pod | 看点 |
+**顶层——每个 pod 一份清单（最初配置）：**
+
+| 文件 | Pod | 形态 |
 |---|---|---|
-| `ivs-llm-chat.md` | 旗舰 chat（DeepSeek-V4-Flash，4 卡） | vLLM 完整命令行与引擎旗标 |
-| `ivs-llm-chat-lite.md` | 高并发 lite（Qwen3.8-27B，2 卡） | MTP×2、`--mamba-cache-mode align` |
-| `ivs-llm-multi.md` | 检索双件（1 卡） | **含 MODELS"残条"事故现场**——重复首条逐字保留 |
-| `ivs-llm-file-parser.md` | 文档解析 | 三容器时代 + VLM 档实弹测试记录 |
-| `deployment-file-parser-ACTIVE-20261109.yaml` | 解析 pod 实际生效的替换清单 | 双容器形态 |
-| `deployment-file-parser-413-replace.yaml` | 替换草案 | 评审史保留 |
-| `deployment-mineru-vllm-413.yaml` | 候选清单 | — |
-| `prod-file-parser-pod-20261106.yaml` | pod 快照 | — |
+| `ivs-llm-chat.yaml` | 旗舰 chat（4 卡） | Deployment，自实弹 cmdline 取证重建 |
+| `ivs-llm-chat-lite.yaml` | 高并发 lite（2 卡） | Deployment，自实弹 cmdline 取证重建 |
+| `ivs-llm-multi.yaml` | 检索双件（1 卡） | Deployment + 原始 MODELS env（发现时缺陷就地注释） |
+| `ivs-llm-file-parser.yaml` | 文档解析（1 卡） | **真件** pod 快照，最初三容器形态（2026-11-06） |
+
+**`raw/`——证据层：** 四份逐字取证（env/cmdline/探针，含 MODELS 残条现场）+ 2026-11-09 替换期的三份真实清单（草案/候选/生效版 ACTIVE）。
 
 ## 脱敏说明
 
