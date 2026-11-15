@@ -6,6 +6,7 @@ LLM 基础设施 / 推理优化 / 评测的实验工具箱——来自一台 RTX
 
 | 目录 | 内容 | 亮点 |
 |---|---|---|
+| `models/` | 模型结构学习手册（真实 checkpoint 解剖） | Qwen3.5-0.8B 逐张量权重普查（0.87B 账目闭合）；"每 token 读全量权重"的完整推导；GDN vs 全注意力对照 |
 | `infra/` | WSL2 上跑 vLLM/CUDA 的环境配方 | `VLLM_WSL2_ENABLE_PIN_MEMORY=1` 这一隐藏开关的定位过程 |
 | `inference/` | 量化工具链 + 基准测试 | llmcompressor 0.14 新 API 七轮排坑定稿脚本；8GB 卡上 4B 模型的完整方案矩阵 |
 | `eval/` | lm-eval 评测管线 + 结果 | 概率型任务接 vLLM 的正确姿势；三模型速度×质量对比数据 |
