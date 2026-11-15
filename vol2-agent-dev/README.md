@@ -1,30 +1,32 @@
-# 卷二 · Agent 应用开发岗手册
+# Volume 2 · Agent Application Developer Handbook
 
-> 状态：骨架就绪。以下章节为一手实践沉淀的迁入计划（来源：内部工程台账），按依赖顺序排列。
+[中文](README.zh.md)
 
-## rag/ —— 企业级 RAG
+> Status: skeleton. Chapters below are the migration plan for first-hand practice records, ordered by dependency.
 
-以开源 RAG 平台（WeKnora 系）的生产化实践为主线：
+## rag/ — Enterprise RAG
 
-| 计划章节 | 内容 |
+Centered on productionizing an open-source RAG platform (WeKnora family):
+
+| Planned chapter | Contents |
 |---|---|
-| 平台选型与二开 | fork 治理策略（官方优先合并）、迁移体系（Dify→WeKnora 映射）、标签树语义 |
-| 检索链路 | embedding/rerank 双件部署形态、task 语义（embedding=双塔召回 / score=单塔精排）、分数语义验收 |
-| Java 端对接 | 认证组合（登录 Bearer 与 scoped key 二选一回退、key+HMAC 铸 X-External-User-Token）、SSE 引用契约 |
-| 企业部署 | 多环境矩阵（测试/生产/DMZ）、托管 DB 迁移、NAS 文件层、断流治理（解析服务版本代差） |
-| 数据运营 | 批量入库吞吐标定、摘要洪水治理、xlsx 数据簿的检索噪音清理 |
+| Platform fork governance | official-first merge strategy, migration tooling (Dify→WeKnora mapping), tag-tree semantics |
+| The retrieval path | embedding/reranker deployment shapes; task semantics (embedding = bi-encoder recall / score = cross-encoder rerank); score-semantics acceptance tests |
+| Java-side integration | auth combinations (login-Bearer vs scoped-key fallback; key+HMAC minted external tokens), SSE citation contracts |
+| Production deployment | multi-environment matrix (staging/prod/DMZ), managed-DB migration, NAS file layer, breaking-change governance for parser services |
+| Data operations | bulk-ingestion throughput calibration, summary-flood governance, cleaning data-sheet noise from retrieval |
 
-## harness/ —— 企业级 Harness
+## harness/ — Enterprise Harness
 
-以 DeepSeek Harness（DSH）的企业落地为主线：
+Centered on DeepSeek Harness (DSH) in the enterprise:
 
-| 计划章节 | 内容 |
+| Planned chapter | Contents |
 |---|---|
-| 部署 | 私有化部署形态、Linux 工具链坑（Windows pnpm 互操作panic、端口双侧查重）、profile 体系 |
-| 插件开发 | cordis patch 机制、MCP 客户端接入、官方只读插件 + 自研写路径插件（三层安全模型）的互补设计 |
-| 模型接驳 | 公网 API / 本地 vLLM 双形态、密钥管理（DSH 对 *KEY* 环境变量的擦洗行为与配置文件通道） |
-| 负载治理 | 大小模型分流（网关 vs 插件 vs 默认值）、拥塞形态下的路由收益边界（实测：无拥塞无收益） |
+| Deployment | private deployment shapes; Linux toolchain traps (Windows pnpm interop panic, dual-side port checks); the profile system |
+| Plugin development | the cordis patch mechanism, MCP client wiring, complementary design of the official read-only plugin and a first-party write-path plugin (three-layer safety model) |
+| Model wiring | public API vs local vLLM dual forms; secret management (DSH scrubs `*KEY*` env vars in agent shells — the config-file channel) |
+| Load governance | small/large-model traffic split (gateway vs plugin vs default flip); measured limits of routing gains (finding: no congestion, no benefit) |
 
-## apps/ —— 应用场景开发
+## apps/ — Application scenarios
 
-知识库问答（引用定位）、双投管线、检索增强的投研治理（因子鉴真模式：生成者与裁判分离）等场景的工程实录。
+Citation-grounded Q&A, dual-submission pipelines, retrieval-audited investment research (the "factor authentication" pattern: separating the generator from the judge), and other engineering records.

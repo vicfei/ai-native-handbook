@@ -1,24 +1,26 @@
-# models/ —— 模型结构学习手册
+# models/ — Model Architecture Learning Handbook
 
-推理优化的每一刀（批量、量化、投机解码、KV 管理）都砍在模型结构的某个具体部位上。不懂结构，调参就是占卜。本板块用一个**真实 checkpoint**（Qwen3.5-0.8B，1.7GB，可下载）做解剖教材，把"结构 → 成本 → 优化"的因果链一次讲透。
+[中文](README.zh.md)
 
-## 学习路径（建议按序）
+Every inference-optimization lever (batching, quantization, speculative decoding, KV management) cuts into a specific part of the model architecture. Without the structure, tuning is divination. This volume uses a **real checkpoint** (Qwen3.5-0.8B, 1.7GB, publicly downloadable) as the dissection subject, and walks the full causal chain: **structure → cost → optimization**.
 
-| 章 | 内容 | 回答的问题 |
+## Learning path (in order)
+
+| Chapter | Content | Questions answered |
 |---|---|---|
-| [01-from-transformer-to-token.md](01-from-transformer-to-token.md) | 从"字怎么变数字"到"自回归循环"的五步推导，含注意力手算迷你例 | 模型到底在算什么？为什么层不能跳？ |
-| [02-memory-bound-and-batch.md](02-memory-bound-and-batch.md) | 54GB 账单、Roofline、批量的数学本质 | 为什么 GPU 推理是"搬运工瓶颈"？批量为什么能白赚？ |
-| [03-checkpoint-anatomy-qwen3-5-0.8b.md](03-checkpoint-anatomy-qwen3-5-0.8b.md) | 逐张量权重普查（每个数字有出处）、数据流全景图、投影/门两原语 | 权重文件里的每个张量是什么、在管道哪一段？ |
-| [04-gdn-vs-full-attention.md](04-gdn-vs-full-attention.md) | GDN 线性注意力 vs 全注意力的解剖对照、门控注意力、MTP×批量张力 | 混合架构为什么 3:1 交错？投机解码什么时候是负优化？ |
+| [01-from-transformer-to-token.md](01-from-transformer-to-token.md) | Five-step derivation from "how a word becomes numbers" to the autoregressive loop, with a hand-computed attention mini-example | What is the model actually computing? Why can't layers be skipped? |
+| [02-memory-bound-and-batch.md](02-memory-bound-and-batch.md) | The 54GB bill, Roofline, and the mathematics of batching | Why is GPU inference memory-bound? Why is batching free money? |
+| [03-checkpoint-anatomy-qwen3-5-0.8b.md](03-checkpoint-anatomy-qwen3-5-0.8b.md) | Per-tensor weight census (every number accounted), full data-flow diagram, the projection/gate primitives | What is every tensor in a weight file, and where does it sit in the pipeline? |
+| [04-gdn-vs-full-attention.md](04-gdn-vs-full-attention.md) | Gated DeltaNet vs full attention anatomy; gated attention; the MTP×batch tension | Why 3:1 interleaving? When is speculative decoding net-negative? |
 
-## 核心结论速览
+## Key takeaways
 
-- **每生成一个 token，全部权重必须完整读一遍**——这是函数复合（层链）与冯·诺依曼架构（数在显存、算在计算单元）两条必然性的乘积，一切推理优化都攻在这条铁律的某一项上。
-- **参数量与文件体积可以互证**：0.87B 个数 × 2 字节(bf16) = 1.63GiB ≈ 文件实际 1.7GB。逐张量乘开求和，账就能闭合——这是审计任何 checkpoint 的标准手法（附脚本思路见 03 章）。
-- **投影 = 乘表 = 空间翻译；门 = 可学习的音量旋钮**。任何模型解剖图里的张量，形状都被上下游"夹"出来：输入侧跟残差流宽度，输出侧跟下游需求。
-- **GDN 层状态恒定（不随序列变长），全注意力层 KV 线性增长**——3:1 交错 = 线性吞吐与精确检索的折中，也决定了缓存参数（如 vLLM 的 `--mamba-cache-mode`）为什么存在。
+- **Every generated token requires reading the full weight set once** — the product of two inevitabilities: function composition (layer chain) and the von Neumann architecture (data lives in memory, compute lives elsewhere). Every inference optimization attacks one term of this law.
+- **Parameter count and file size cross-validate**: 0.87B numbers × 2 bytes (bf16) = 1.63 GiB ≈ the actual 1.7GB file. Per-tensor census closes the accounting — the standard method for auditing any checkpoint (script in chapter 03).
+- **Projection = multiply by a table = translation between spaces; gate = a learned volume knob.** In any anatomy diagram, tensor shapes are squeezed out by upstream/downstream: input side follows the residual-stream width, output side follows what the next step needs.
+- **GDN state is constant (does not grow with sequence length); full-attention KV grows linearly** — the 3:1 interleave trades linear-cost throughput for exact retrieval, and is why cache parameters like vLLM's `--mamba-cache-mode` exist.
 
-## 解剖对象
+## Dissection subject
 
-- 模型：Qwen3.5-0.8B（`Qwen3_5ForConditionalGeneration`，原生多模态，GDN 混合架构 24 层 + 12 层 ViT + MTP 头）
-- 工具：任何 HF 格式 safetensors 文件 + 一段 20 行的 Python（读文件头 JSON，无需加载权重）——见 03 章。
+- Model: Qwen3.5-0.8B (`Qwen3_5ForConditionalGeneration`, natively multimodal, 24-layer GDN-hybrid + 12-layer ViT + MTP head)
+- Tooling: any HF-format safetensors file + ~20 lines of Python (reads the file header JSON; no weight loading needed) — see chapter 03.

@@ -1,78 +1,80 @@
-# 01 · 从 Transformer 到"生成一个 token"：五步推导
+# 01 · From Transformer to "Generating One Token": a Five-Step Derivation
 
-> 本章不需要任何深度学习前置知识。所有矩阵尺寸取自 Qwen3.5-0.8B 的真实 checkpoint（见 [03 章](03-checkpoint-anatomy-qwen3-5-0.8b.md)），不是教科书假设。
+[中文](01-from-transformer-to-token.zh.md)
 
-## 第 1 步：文字变成数字（Embedding）
+> No deep-learning prerequisites. All matrix sizes come from a real Qwen3.5-0.8B checkpoint (see [chapter 03](03-checkpoint-anatomy-qwen3-5-0.8b.md)) — not textbook assumptions.
 
-模型不认识字，只认识数。第一步是查一张巨大的户口表——**Embedding 矩阵 E**（词表 248,320 行 × 1024 列）：
+## Step 1: Words become numbers (Embedding)
 
-```
-"我爱吃苹果" → 分词器 → token id: [314, 8721, 19526, 8891]（示意）
-查表 → 4 个 1024 维向量
-```
-
-这张表本身就是权重的一部分（约 2.5 亿个数）。此刻向量是"死"的：苹果的向量和发布会的向量互不相干。
-
-## 第 2 步：注意力——让词互相看见
-
-问题："苹果"不知道自己身处水果摊还是发布会。注意力的设计是给每个词发三张身份卡（各自乘一张投影表得到）：
-
-- **Q**（query，我在找什么）
-- **K**（key，我能被怎样找到）
-- **V**（value，我实际携带的信息）
-
-词 i 对词 j 的关注度 = `q_i · k_j`（点积 = 合拍程度），过 softmax 归一化，输出 = 按权重混合所有词的 V。
-
-**手算迷你例**（2 维玩具，投影表取单位阵）：
+The model doesn't know letters, only numbers. First, a giant lookup — the **embedding matrix E** (248,320 rows × 1024 columns):
 
 ```
-词1 "苹果" x₁=[1,0]   词2 "发布" x₂=[0,1]
+"I love apples" → tokenizer → token ids: [314, 8721, 19526, 8891] (illustrative)
+lookup → 4 vectors of 1024 dims
+```
 
-词1 打分：对自己 q₁·k₁ = 1；对词2 q₁·k₂ = 0
+This table is itself part of the weights (~254M numbers). At this point the vectors are inert: "apple" and "keynote" know nothing of each other.
+
+## Step 2: Attention — letting words see each other
+
+Problem: "apple" doesn't know whether it sits in a fruit stand or a product launch. Attention gives each word three role cards (each obtained by multiplying a projection table):
+
+- **Q** (query — what am I looking for)
+- **K** (key — how can I be found)
+- **V** (value — the information I actually carry)
+
+Attention of word i toward word j = `q_i · k_j` (dot product = compatibility), softmax-normalized; output = the V's mixed by those weights.
+
+**Hand-computed mini example** (2-D toy, identity projection tables):
+
+```
+word1 "apple" x₁=[1,0]   word2 "launch" x₂=[0,1]
+
+word1 scores: self q₁·k₁ = 1; word2 q₁·k₂ = 0
 softmax([1, 0]) ≈ [0.73, 0.27]
-词1 新向量 = 0.73·v₁ + 0.27·v₂ = [0.73, 0.27]
+word1 new vector = 0.73·v₁ + 0.27·v₂ = [0.73, 0.27]
 ```
 
-"苹果"的向量里从此混进了"发布"的信息——这就是语境融合。GPT 加一条家规（causal mask）：只能看自己和左边的词，防止偷看未来。
+"apple"'s vector now contains part of "launch" — that is context fusion. GPT adds one house rule (causal mask): a word may only attend to itself and words to its left — no peeking at the future.
 
-## 第 3 步：一层的完整流水（真实尺寸）
-
-```
-输入 X：L 个 token × 1024 维
-① q/k/v 投影（1024→4096/512/512）→ 注意力打分混合 → o_proj 投回 1024
-② 残差连接 + RMSNorm（稳定数值，参数仅 1024 个）
-③ MLP（SwiGLU）：gate/up 升维 1024→3584，SiLU 门控逐维相乘，down 压回 1024
-④ 残差 + RMSNorm
-```
-
-一层 = 7 张大表（q/k/v/o + gate/up/down），每个 token 穿过时每张表的每个数字都参与一次乘法。
-
-## 第 4 步：GPT = N 层串联 + 一张出口表
+## Step 3: One full layer (real sizes)
 
 ```
-最终输出 = f₂₄( f₂₃( … f₂(x) … ) )     ← 数学上就是函数复合嵌套
+Input X: L tokens × 1024 dims
+① q/k/v projections (1024→4096/512/512) → attention scoring & mixing → o_proj back to 1024
+② residual + RMSNorm (stabilizes numbers; only 1024 parameters)
+③ MLP (SwiGLU): gate/up up-project 1024→3584, SiLU gate multiplies elementwise, down projects back to 1024
+④ residual + RMSNorm
 ```
 
-**层不能跳的数学根源**：第 2 层的输入是第 1 层的输出，想知道第 24 层算什么必须算完第 23 层，一路倒推。最后 LM head（本模型复用 E 的转置，即 tied）把 1024 维投影到词表维度：
+One layer = 7 large tables (q/k/v/o + gate/up/down); every number in every table participates in a multiplication for every token passing through.
+
+## Step 4: GPT = N chained layers + one output table
 
 ```
-logits = Eᵀ · h ∈ R^248320  →  softmax  →  下一个 token 的概率分布
+final output = f₂₄( f₂₃( … f₂(x) … ) )     ← function composition, nested
 ```
 
-## 第 5 步：自回归循环——一切的引擎
+**The mathematical root of "no layer can be skipped"**: layer 2's input is layer 1's output; to know what layer 24 computes you must compute layer 23, all the way back. Finally the LM head (this model reuses E transposed — "tied") projects 1024 dims to vocabulary size:
+
+```
+logits = Eᵀ · h ∈ R^248320  →  softmax  →  probability distribution of the next token
+```
+
+## Step 5: The autoregressive loop — the engine of everything
 
 ```python
 tokens = tokenize(prompt)
 while not done:
-    logits = forward(tokens)          # 穿过全部层 × 每层 7 张表 + LM head
+    logits = forward(tokens)          # through all layers × 7 tables each + LM head
     next_id = sample(softmax(logits[-1]))
-    tokens.append(next_id)            # 新 token 接到句尾，再来一遍
+    tokens.append(next_id)            # append, then do it all again
 ```
 
-**每次循环 = 一次全量前向 = 触碰模型里每一个权重数字。** 写 100 个字就跑 100 遍。KV cache 优化的只是"历史 token 的 K/V 不必重算"，每遍的权重表格一张不少——这就是 [02 章](02-memory-bound-and-batch.md) 那张 54GB 账单的出处。
+**Each iteration = one full forward pass = touching every single weight number.** Writing 100 tokens runs the pipeline 100 times. KV caching only avoids recomputing historical K/V — the weight tables are still read in full every pass. That is the origin of the 54GB bill in [chapter 02](02-memory-bound-and-batch.md).
 
-## 本章三个带走的结论
+## Three takeaways
 
-1. 模型没有答案库，只有加工流水线——生成是"算"出来的，不是"查"出来的；
-2. 层层函数复合 → 每次前向必须穿过每张表，一处不能省；
-3. 自回归天生串行（第 N+1 个字的输入依赖第 N 个字的结果）→ 权重全读的固定成本每个 token 重复一次。
+1. A model has no answer database, only a processing pipeline — generation is computed, not looked up;
+2. Layered function composition → every forward pass must traverse every table; nothing can be skipped;
+3. Autoregression is inherently sequential (token N+1's input depends on token N) → the full-weight-read fixed cost repeats once per token.

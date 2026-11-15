@@ -1,56 +1,58 @@
-# 04 · GDN vs 全注意力：混合架构的解剖对照
+# 04 · GDN vs Full Attention: Anatomy of a Hybrid Architecture
 
-> Qwen3.5/Qwen3-Next 一代把语言主干做成 **18 层 GDN + 6 层全注意力（3:1 交错）**。本章对照两种层的机制、成本与角色，并解释由此派生的服务参数。
+[中文](04-gdn-vs-full-attention.zh.md)
 
-## 两种层各是什么
+> The Qwen3.5 / Qwen3-Next generation builds language trunks as **18 GDN layers + 6 full-attention layers (3:1 interleaved)**. This chapter contrasts the two mechanisms, costs, and roles — and explains the serving parameters they dictate.
 
-**全注意力（softmax attention）**——经典配方：每个 token 对所有前文 token 算 `softmax(QKᵀ/√d)·V`。检索能力最强（任意位置精确回溯），代价是计算与 KV cache 都随序列长度平方/线性增长。本模型还加了一层现代改良：**门控注意力**（q_proj 里藏一份每头输出门，见 [03 章](03-checkpoint-anatomy-qwen3-5-0.8b.md)）。
+## What each layer is
 
-**GDN（Gated DeltaNet，线性注意力）**——把"看全部前文"换成"维护一份压缩记忆"：每头一个 128×128 的状态矩阵 S，逐 token 递推更新：
+**Full attention (softmax attention)** — the classic: each token attends over all previous tokens via `softmax(QKᵀ/√d)·V`. Strongest retrieval (exact recall at any position), at quadratic compute and linearly growing KV cache. This model adds a modern refinement: **gated attention** (a per-head output gate hidden inside q_proj — see [chapter 03](03-checkpoint-anatomy-qwen3-5-0.8b.md)).
+
+**GDN (Gated DeltaNet, linear attention)** — replaces "look at all history" with "maintain a compressed memory": a 128×128 state matrix S per head, updated recurrently per token:
 
 ```
-k̃ₜ = kₜ − Sₜ₋₁ᵀ qₜ          （delta rule：写入前先减掉"已记住的部分"——防重复记账）
-Sₜ = αₜ·Sₜ₋₁ + βₜ·vₜ·k̃ₜᵀ    （α=遗忘门，β=写入门，各每头一个标量）
-hₜ = Sₜᵀ qₜ                   （读出）
+k̃ₜ = kₜ − Sₜ₋₁ᵀ qₜ          (delta rule: subtract what's already memorized before writing — no double-counting)
+Sₜ = αₜ·Sₜ₋₁ + βₜ·vₜ·k̃ₜᵀ    (α = forget gate, β = write gate; one scalar per head each)
+hₜ = Sₜᵀ qₜ                   (readout)
 ```
 
-直觉：S 是一间 128×128 的记忆房间，每个 token 进来"扔掉一点旧的、写入一点新的"。**房间大小恒定**——这是它与 KV cache 的本质区别。
+Intuition: S is a 128×128 memory room; each token "discards a little old, writes a little new". **The room size never changes** — the essential difference from a KV cache.
 
-## 成本对照
+## Cost comparison
 
-| | GDN ×18 | 全注意力 ×6 |
+| | GDN ×18 | Full attention ×6 |
 |---|---|---|
-| 序列复杂度 | O(L) | O(L²) |
-| 状态 | 每序列每层恒定 ~0.5MB（S 矩阵） | 每 token 每层 KV（本模型 2KV头×256 维 → fp8 下每层 ~1KB/token） |
-| 检索能力 | 近期 + 有损压缩记忆 | 任意位置精确回溯 |
-| prefill 工程形态 | 分块并行（chunk kernel） | 标准 attention backend |
-| decode 工程形态 | 融合递推核 | 标准 attention |
+| Sequence complexity | O(L) | O(L²) |
+| State | constant ~0.5MB per layer per sequence (the S matrices) | KV per token per layer (2 KV heads × 256 dims → ~1KB/token/layer at fp8) |
+| Retrieval | recent + lossy compressed memory | exact recall at any position |
+| Prefill engineering | chunked-parallel kernels | standard attention backends |
+| Decode engineering | fused recurrent kernels | standard attention |
 
-**3:1 交错的设计意图**：18 层 GDN 用线性复杂度扛长序列吞吐，每 4 层插一层全注意力做"精确检索锚点"。这也是 vLLM 对该架构家族需要 `--mamba-cache-mode` 参数的原因——引擎要同时管理两种状态形态（GDN 的恒定状态 + 全注意力的 KV）。
+**Design intent of 3:1**: 18 GDN layers carry long-sequence throughput at linear cost; every 4th layer is a full-attention "exact retrieval anchor". This is also why vLLM needs `--mamba-cache-mode` for this family — the engine manages two state forms at once (GDN's constant state + full attention's KV).
 
-## GDN 层的配套零件（位置与作用）
+## GDN's companion parts (position and purpose)
 
-| 零件 | 位置 | 作用 |
+| Part | Position | Purpose |
 |---|---|---|
-| conv1d (6144,1,4) | qkv 投影之后、拆头之前 | 递推看不见"紧挨着的前几个词"（都被压进 S 了），这个 4 宽 depthwise 小窗给每个位置开一个猫眼——Mamba 血统标配 |
-| in_proj_a/b (16,1024) | 与 qkv 并联，各读 x | 每头产出一个数 → α 遗忘门 / β 写入门（16 间房各配一个管理员） |
-| A_log / dt_bias (16,) | α/β 的 sigmoid 内 | 每头衰减基线（log 空间训练保稳定）与写入偏置 |
-| in_proj_z → SiLU(z)⊙h | 读出结果之后、out_proj 之前 | 输出门：对"记忆里读出的内容"逐维调音量 |
+| conv1d (6144,1,4) | after qkv projection, before head split | recurrence can't see the immediately preceding words (they're compressed into S); this 4-wide depthwise window is a per-position peephole — a Mamba-lineage staple |
+| in_proj_a/b (16,1024) | parallel to qkv, both read x | one scalar per head → α forget gate / β write gate (a manager per memory room) |
+| A_log / dt_bias (16,) | inside α/β's sigmoid | per-head decay baseline (log-space training stability) and write bias |
+| in_proj_z → SiLU(z)⊙h | after readout, before out_proj | output gate: per-dimension volume control over what's read from memory |
 
-## MTP 头：投机解码的载具
+## The MTP head: speculative decoding's vehicle
 
-MTP（Multi-Token Prediction）= 训练时与主干共同训练的 20M 旁挂模块（结构见 03 章），从同一隐状态额外预测第 2 个 token。推理时作为 draft 模型：先猜 N 个 token，主干一趟前向批量校对（校对近乎免费——权重反正要读，见 [02 章](02-memory-bound-and-batch.md)）。
+MTP (Multi-Token Prediction) = a 20M side module co-trained with the trunk (structure in chapter 03) that predicts the second-next token from the same hidden state. At inference it is the drafter: guess N tokens, the trunk verifies them in one batched pass (verification is nearly free — the weights were going to be read anyway; see [chapter 02](02-memory-bound-and-batch.md)).
 
-**收支结构**：省带宽（少跑几趟），花算力（草稿生成+校对，被拒草稿是纯浪费）。因此收益区间在低批量（Qwen3.5-0.8B 实测 MTP 接受长度约 1.8，即平均每步多拿约 0.8 个免费 token）；高批量下批量摊薄已让带宽不再是瓶颈，草稿算力反而与真实 token 抢资源。
+**The ledger**: saves bandwidth (fewer passes), spends compute (draft + verify; rejected drafts are pure waste). The win region is low batch (Qwen3.5-0.8B measured MTP acceptance length ≈ 1.8 — roughly 0.8 free tokens per step); at high batch, batching has already amortized bandwidth, and draft compute competes with real tokens.
 
-**配置判据**：`--speculative-config` 的 `num_speculative_tokens` 不是越大越好，应跟随"接受率 × 并发"曲线分档——低载开、饱和关，或交给引擎的 adaptive verification 实时决定。
+**Configuration criterion**: `num_speculative_tokens` is not "bigger is better" — follow the acceptance-rate × concurrency curve: on at low load, off at saturation, or delegate to the engine's adaptive verification.
 
-## 一张图收尾
+## Closing picture
 
 ```
-序列 → [GDN]×3 → [全注意力]×1 → [GDN]×3 → [全注意力]×1 → …（×6 组）
-        ↑ 线性吞吐层              ↑ 精确检索锚点
-      状态恒定 0.5MB/层        KV 随 token 线性增长
+sequence → [GDN]×3 → [full attn]×1 → [GDN]×3 → [full attn]×1 → … (×6 groups)
+            ↑ linear-throughput layers        ↑ exact-retrieval anchors
+          constant state 0.5MB/layer      KV grows linearly with tokens
 ```
 
-混合架构的全部要点：**用 18 层的"有损记忆"换长序列的线性成本，靠 6 层"无损回看"守住关键检索能力**——理解了这对取舍，该家族模型的服务参数（mamba-cache-mode、KV dtype、投机档位）就都有了结构层面的解释。
+The whole point of the hybrid: **trade 18 layers of lossy memory for linear long-sequence cost, and keep exact recall alive through 6 full-attention layers.** Once this trade is understood, the family's serving parameters (mamba-cache-mode, KV dtype, speculation level) all gain structural explanations.
