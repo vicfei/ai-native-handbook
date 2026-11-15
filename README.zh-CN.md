@@ -2,7 +2,7 @@
 
 # AI-Native Handbook —— 企业 AI 岗位手册
 
-**来自真实 8×H20 生产集群、逐张量解剖的真实 checkpoint、真实事故的 AI-Native 工程团队操作手册。**
+**LLM 服务前沿的一线实录——8×H20 生产推理集群、混合线性注意力架构、可审计的运维纪律。**
 
 English · [中文](README.zh-CN.md)
 
@@ -10,32 +10,32 @@ English · [中文](README.zh-CN.md)
 
 ---
 
-三卷手册、同一套底座认知、三类岗位：
+## 这是什么
+
+AI-Native 工程团队的三卷操作手册。全部内容**一手**：生产参数、事故取证、可复现的测量——不是他人博客的二手汇编。
+
+**不同之处：**
+
+- **一台生产集群的逐参数档案。** 8×H20（96GB HBM3）单机承载四种真实负载——旗舰对话（TP4+EP、196K 上下文、投机解码×5）、高并发 lite（TP2、MTP×2、96 槽位）、多模态文档解析、交叉编码器检索双件。完整配置记录 + 系统化审计发现的**六类缺陷**——包括一个大多数团队察觉不到的静默语义故障（[vol1-infra/production/](vol1-infra/production/)）。
+- **架构优先的地基。** 四章内容从第一性原理推导到真实生产代际的 checkpoint，得出统一解释一切推理优化的那条定律——*每生成一个 token 都要完整读一遍全部权重*——并用它统一批量、量化、MoE 与投机解码；逐张量普查方法论让参数账目精确到字节闭合（[vol1-infra/models/](vol1-infra/models/)）。
+- **证据链运维。** 每条配置主张都附着压测曲线、语义验收或事故取证——审计方法论本身就是内容，而不只是修复结果。
+
+辅助实验（量化矩阵、kernel 研究、缓存命中率基准）留在各自章节内，明确标注适用范围。
+
+## 三卷手册
 
 | 卷 | 读者 | 内容 | 状态 |
 |---|---|---|---|
-| [vol1-infra/](vol1-infra/) | 基础设施 / 推理优化岗 | **模型结构学习手册**（checkpoint 解剖、Roofline 记账、GDN 混合架构）· 量化工具链与基准 · vLLM 部署配方 · kernel 学习材料 · **生产参考：一台 8×H20 上 4-pod 推理集群的逐参数档案** | ✅ 已上线 |
-| [vol2-agent-dev/](vol2-agent-dev/) | Agent 应用开发岗 | 企业级 RAG（开源平台二开、Java 端对接、企业部署）· 企业级 Harness（部署与二开）· 应用场景开发 | 🚧 骨架 |
+| [vol1-infra/](vol1-infra/) | 基础设施 / 推理优化岗 | 模型结构地基（Roofline 记账、GDN 混合架构与门控注意力解剖）· 量化工具链与基准 · vLLM 部署配方 · kernel 学习材料 · **生产集群参考** | ✅ 已上线 |
+| [vol2-agent-dev/](vol2-agent-dev/) | Agent 应用开发岗 | 企业级 RAG（平台二开、Java 端对接、企业部署）· 企业级 Harness（部署与二开）· 应用场景 | 🚧 骨架 |
 | vol3-org/（远期） | 管理者 / 转型推动者 | 评测驱动的管理、自动化等级 | 📋 规划 |
 
-**这本手册的不同之处：**
+**从哪开始**：[vol1-infra/models/](vol1-infra/models/)——四章地基。零前置从第一性原理讲起（新人的入口坡道），落点却全是生产关切：混合线性注意力模型为什么需要双状态管理、投机解码何时转为负贡献、张量形状如何透露它的角色。
 
-- **一台生产集群的逐参数档案**——8×H20（96GB）单机承载四种真实负载：旗舰对话（TP4+EP、196K 上下文）、高并发 lite（TP2、MTP×2、96 槽位）、文档解析、检索双件。完整配置记录 + 审计发现的六类缺陷——包括一个大多数团队察觉不到的静默语义故障（[vol1-infra/production/](vol1-infra/production/)）。
-- **一个真实 checkpoint 的逐张量普查**——Qwen3.5-0.8B 权重账目闭合（0.87B × 2B = 1.63GiB ≈ 文件实际大小），并用它推导出统一解释所有推理优化的一条定律（[vol1-infra/models/](vol1-infra/models/)）。
-- **两种环境，如实标注**——生产内容在 8×H20 集群上验证；实验内容跑在一台 RTX 4060 8GB 笔记本上，刻意收紧的台架逼你为每一个显存字节记账。
-
-**从哪开始**：[vol1-infra/models/](vol1-infra/models/)——四章内容，从一个真实的 0.8B checkpoint 出发第一性推导"**每生成一个 token 都要完整读一遍全部权重**"，并说明这条定律如何统一解释批量、量化、MoE 与投机解码。它是手册其余一切的公共地基。
-
-**旗舰生产内容**：[vol1-infra/production/8xh20-four-pod-reference.zh.md](vol1-infra/production/8xh20-four-pod-reference.zh.md)——4-pod 推理集群的完整配置档案（旗舰对话 / 高并发 lite / 文档解析 / 检索双件），含审计发现的六类缺陷与语义陷阱（同一个 reranker 模型，`--task embedding` 与 `--task score` 的差别就是余弦相似度与真判别概率的差别）。
-
-> 配套地图：[awesome-ai-native](https://github.com/vicfei/awesome-ai-native) —— 论点驱动的 AI-Native 企业地图（为什么与往哪去）。本手册管"怎么做"。
+> 配套地图：[awesome-ai-native](https://github.com/vicfei/awesome-ai-native) —— 论点驱动的 AI-Native 企业地图（"为什么"与"往哪去"）。本手册管"怎么做"。
 
 ## 约定
 
-- 英文为主语言，每章配 `.zh.md` 中文版（每篇顶部有语言切换）。
-- 全部一手内容：真实 checkpoint、真实集群、真实事故，数字可复现（普查脚本约 20 行 Python）。
-- 发布规范见 [PUBLISHING.md](PUBLISHING.md)——技术细节完全开放（owner 裁定），公司名与凭据不出现。
-
-## 内容出处
-
-生产侧：离线私有云，8×H20 单机四 pod——参数、事故时间线与修复均来自实盘。实验侧：RTX 4060 Laptop 8GB (WSL2) / vLLM v0.29 / llmcompressor 0.14 / lm-eval——约束本身就是课程。
+- 英文为主语言，每章配 `.zh.md` 中文版（每篇顶部语言切换）。
+- 生产内容与辅助实验在出现处分别标注；硬件与版本细节留在使用它们的章节内。
+- 发布规范见 [PUBLISHING.md](PUBLISHING.md)。
