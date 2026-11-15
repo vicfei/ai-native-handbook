@@ -23,7 +23,8 @@
 | KV cache | fp8，block-size 256 |
 | 显存 | gpu-memory-utilization 0.9；KV offloading native 64GB |
 | 投机解码 | dspark ×5（greedy） |
-| 其它 | VLLM_ENGINE_READY_TIMEOUT_S=3600（大权重冷启容忍）；四别名路由（max-think/think/large 系） |
+| 探针 | **三件套齐备**（startup 30×30s / readiness 15×3 / liveness 60×3，均 tcpSocket 8000）——与 lite 的裸奔形成对照，同一团队无基线模板的元缺陷；另 startup 预算 30min < 引擎自等 1h，内部不一致 |
+| 其它 | VLLM_ENGINE_READY_TIMEOUT_S=3600（大权重冷启容忍）；四别名路由（**命令行结构存疑**：按导出文本仅 1 别名+3 游离位置参数+非上游旗标 --enable-max-think，待 /v1/models 验证） |
 
 ### ivs-llm-chat-lite —— 轻量高并发（Qwen3.8-27B，2 卡）
 

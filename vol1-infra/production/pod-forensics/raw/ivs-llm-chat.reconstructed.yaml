@@ -41,7 +41,7 @@ spec:
         - { name: http, containerPort: 8000 }
         resources:
           limits: { nvidia.com/gpu: 4 }
-        livenessProbe:                         # audit defect #1: no readiness/startup
+        livenessProbe:                         # NOTE: reconstruction-era assumption "no readiness/startup" was WRONG — the authentic export has the full probe trio; see top-level ivs-llm-chat.yaml
           tcpSocket: { port: 8000 }
         volumeMounts:
         - { name: models,  mountPath: /data/models }   # NAS, weights separate from image

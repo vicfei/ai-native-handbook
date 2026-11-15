@@ -23,7 +23,8 @@
 | KV cache | fp8, block-size 256 |
 | Memory | gpu-memory-utilization 0.9; native KV offloading 64GB |
 | Speculative | dspark ×5 (greedy) |
-| Misc | VLLM_ENGINE_READY_TIMEOUT_S=3600 (cold-start tolerance for large weights); four routing aliases |
+| Probes | **full trio present** (startup 30×30s / readiness 15×3 / liveness 60×3, all tcpSocket 8000) — contrasting with lite's liveness-only; evidence of no shared baseline template. Also startup budget 30min < engine's own 1h wait: internally inconsistent |
+| Misc | VLLM_ENGINE_READY_TIMEOUT_S=3600; four routing aliases (**command-line structure suspect**: per the export, 1 alias value + 3 stray positionals + a non-upstream flag `--enable-max-think`; verify via /v1/models) |
 
 ### ivs-llm-chat-lite — lightweight high-concurrency (Qwen3.8-27B, 2 GPUs)
 
