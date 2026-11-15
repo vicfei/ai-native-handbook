@@ -1,0 +1,4 @@
+# 最终生效版存档（云平台 2026-11-09 05:46 上线，generation 42）
+# 与我方草稿的差异=内网大模型审查修订：①调度注解改嵌套形态 ②requests 删
+# nvidia.com/gpu ③两层 labels 补 le（平台 UCMDB 校验房规）④dshm 改 tmpfs
+# Memory 16Gi ⑤探针 timeout 1s 规范化。源=用户回传的平台生效 YAML（OCR 还原）。

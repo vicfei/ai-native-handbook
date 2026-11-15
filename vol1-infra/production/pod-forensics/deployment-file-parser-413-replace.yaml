@@ -1,0 +1,119 @@
+# =====================================================================
+# ivs-llm-file-parser 现役替换版（2026-11-09）
+# 语义：mineru-api + sglang-server 两容器 → 单容器 mineru-vllm:4.1.3-cu129；
+#      memect-parser 原样保留（格式转换服务，与本替换无耦合）。
+# ⚠️ 断流警示：4.1.3 无 /file_parse 路由（任务制 /v1/tasks 三步）——
+#    WeKnora mineru 引擎直连将断（租户已切内置引擎则零影响）；
+#    其他直连 /file_parse 的调用方替换前需向平台组确认清单。
+# 回滚锚：registry.internal/ivs-etl/mineru-sglang:v2.2.2（digest 25568953…）
+#        回滚=恢复原三容器模板 + up。
+# 端口不变：新容器仍监听 :8000 → 原 Service/域名 ivs-llm-file-parser 零改动。
+# =====================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ivs-llm-file-parser
+  namespace: ivs-etl-hpc-prd
+  labels:
+    app: ivs-llm-file-parser
+    sub_sys_code: IVS-ETL
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ivs-llm-file-parser
+  strategy:
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1        # 原样：GPU 单副本先停旧再起新
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: ivs-llm-file-parser
+        sub_sys_code: IVS-ETL
+      annotations:
+        # 原 pod 独立键形态原样保留（平台两种形态并存，不引入变化）：
+        leafCellType: NVIDIA-H20
+        virtualCluster: prop-vc-ai-8gpu
+        serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+    spec:
+      containers:
+        # ── 新：MinerU 4.1.3（API+vLLM 一体，接原 sglang 的 GPU 卡位）──
+        - name: mineru-api
+          image: registry.internal/ivs-etl/mineru-vllm:4.1.3-cu129
+          imagePullPolicy: IfNotPresent
+          command: ["mineru-kit"]
+          args: ["api-server", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: caas_logs_stdout
+              value: "true"
+          resources:
+            # 与现役总额一致（用户拍板不降配额）：本容器 = 原 sglang-server + 原
+            # mineru-api 两容器资源之和；memect 原样 → pod 合计 req cpu16/mem64G、
+            # lim cpu64/mem256G，与现役三容器一字不差。
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "12"
+              memory: 48Gi
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "48"
+              memory: 192Gi
+          startupProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 15
+            failureThreshold: 40     # 10 分钟启动容忍
+          readinessProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 60
+            failureThreshold: 3
+          volumeMounts:
+            - mountPath: /data
+              name: ivs-etl-hpc-nas   # 权重已烤入镜像；保留 NAS 供输出/缓存
+            - mountPath: /dev/shm
+              name: dshm
+        # ── 保留：memect-parser（原样，仅删与被替换容器的隐式耦合）──
+        - name: memect-parser
+          image: registry.internal/ivs-etl/memect-parser:2025.09.17
+          imagePullPolicy: IfNotPresent
+          command: ["./start.sh", "xserver", "--watch", "--tm-api"]
+          ports:
+            - containerPort: 6111
+              protocol: TCP
+            - containerPort: 7111
+              protocol: TCP
+          env:
+            - name: caas_logs_stdout
+              value: "true"
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: none
+          resources:
+            requests:
+              cpu: "4"
+              memory: 16Gi
+            limits:
+              cpu: "16"
+              memory: 64Gi
+          volumeMounts:
+            - mountPath: /data
+              name: ivs-etl-hpc-nas
+            - mountPath: /dev/shm
+              name: dshm
+      volumes:
+        - name: ivs-etl-hpc-nas
+          persistentVolumeClaim:
+            claimName: ivs-etl-hpc-nas
+        - emptyDir: {}
+          name: dshm                  # 原 pod 形态保留（普通 emptyDir）
+      imagePullSecrets:
+        - name: iap-ivs-etl
+        - name: iap-default
+        - name: default

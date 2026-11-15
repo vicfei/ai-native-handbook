@@ -1,0 +1,178 @@
+# 现役 ivs-llm-file-parser pod YAML 存档（2026-11-06 用户拍照经 OCR 还原）
+# 可信度注：结构可信度高；ha:K8S 等 label 疑 OCR 瑕疵；pod-scheduling-spec 注解值为
+# 嵌套结构，OCR 未还原（终版试验位 YAML 需向平台组索要原文）。
+# 三容器：sglang-server(GPU1,:30000) / mineru-api(:8000,--enable_sglang_engine=true)
+#        / memect-parser(:6111/:7111,独立sidecar与MinerU无关)
+# 关键实锚：namespace ivs-etl-hpc-prd；NAS PVC ivs-etl-hpc-nas 挂 /data；dshm=普通emptyDir；
+#        镜像 mineru-sglang:v2.2.2（api与sglang同镜像）；启动 2026-03-04，restartCount 全 0。
+# ── 以下为 OCR 还原原文 ──
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    hivedscheduler.microsoft.com/pod-scheduling-spec:
+    leafCellType: NVIDIA-H20
+    virtualCluster: prop-vc-ai-8gpu
+    serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+    creationTimestamp: "2026-03-04T16:23:31Z"
+  generateName: ivs-llm-file-parser-7cb98fdd4c-
+  labels:
+    app: ivs-llm-file-parser
+    clustersoft: docker
+    ha:K8S
+    kueue.x-k8s.io/workload-replicas: "1"
+    le: IVS-ETL-PYTHON-BBG
+    pks.internal/create_user: <operator>
+    pks.internal/recreate-revision: 6757b8ffb6
+    pod-template-hash: 7cb98fdd4c
+    sub_sys_code: IVS-ETL
+  name: ivs-llm-file-parser-7cb98fdd4c-2zwms
+  namespace: ivs-etl-hpc-prd
+  ownerReferences:
+  - apiVersion: apps/v1
+    blockOwnerDeletion: true
+    controller: true
+    kind: ReplicaSet
+    name: ivs-llm-file-parser-7cb98fdd4c
+    uid: b5fadb81-2547-4942-bee4-a2a8b01359b7
+  resourceVersion: "51247226950"
+  selfLink: /api/v1/namespaces/ivs-etl-hpc-prd/pods/ivs-llm-file-parser-7cb98fdd4c-2zwms
+  uid: 7953d5a5-c6bb-4c2c-ba5f-b4b49229a9ad
+spec:
+  affinity: {}
+  containers:
+  - command:
+    - mineru-sglang-server
+    - --host
+    - 0.0.0.0
+    - --port
+    - "30000"
+    env:
+    - name: caas_logs_stdout
+      value: "true"
+    - name: MINERU_MODEL_SOURCE
+      value: local
+    - name: PKS_CLUSTERNAME
+      value: <internal-cluster>
+    - name: PKS_APPID_DETECTOR
+      value: wiseapm_b976a5e24aaf9cca
+    image: registry.internal/ivs-etl/mineru-sglang:v2.2.2
+    imagePullPolicy: IfNotPresent
+    lifecycle: {}
+    name: sglang-server
+    ports:
+    - containerPort: 30000
+      name: sglang-server
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "32"
+        memory: 128Gi
+        nvidia.com/gpu: "1"
+      requests:
+        cpu: "8"
+        memory: 32Gi
+        nvidia.com/gpu: "1"
+    volumeMounts:
+    - mountPath: /data
+      name: ivs-etl-hpc-nas
+    - mountPath: /dev/shm
+      name: dshm
+  - command:
+    - mineru-api
+    - --host
+    - 0.0.0.0
+    - --port
+    - "8000"
+    - --enable_sglang_engine
+    - "true"
+    env:
+    - name: caas_logs_stdout
+      value: "true"
+    - name: PKS_CLUSTERNAME
+      value: <internal-cluster>
+    - name: PKS_APPID_DETECTOR
+      value: wiseapm_b976a5e24aaf9cca
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: none
+    image: registry.internal/ivs-etl/mineru-sglang:v2.2.2
+    imagePullPolicy: IfNotPresent
+    lifecycle: {}
+    name: mineru-api
+    ports:
+    - containerPort: 8000
+      name: mineru-api
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "16"
+        memory: 64Gi
+      requests:
+        cpu: "4"
+        memory: 16Gi
+    volumeMounts:
+    - mountPath: /data
+      name: ivs-etl-hpc-nas
+    - mountPath: /dev/shm
+      name: dshm
+  - command:
+    - ./start.sh
+    - xserver
+    - --watch
+    - --tm-api
+    env:
+    - name: caas_logs_stdout
+      value: "true"
+    - name: PKS_CLUSTERNAME
+      value: <internal-cluster>
+    - name: PKS_APPID_DETECTOR
+      value: wiseapm_b976a5e24aaf9cca
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: none
+    image: registry.internal/ivs-etl/memect-parser:2025.09.17
+    imagePullPolicy: IfNotPresent
+    lifecycle: {}
+    name: memect-parser
+    ports:
+    - containerPort: 6111
+      protocol: TCP
+    - containerPort: 7111
+      protocol: TCP
+    resources:
+      limits:
+        cpu: "16"
+        memory: 64Gi
+      requests:
+        cpu: "4"
+        memory: 16Gi
+    volumeMounts:
+    - mountPath: /data
+      name: ivs-etl-hpc-nas
+    - mountPath: /dev/shm
+      name: dshm
+  dnsPolicy: ClusterFirst
+  enableServiceLinks: true
+  imagePullSecrets:
+  - name: iap-ivs-etl
+  - name: iap-default
+  - name: default
+  nodeName: virtual-node-ooyt1f3hmr
+  restartPolicy: Always
+  schedulerName: default-scheduler
+  serviceAccount: default
+  serviceAccountName: default
+  terminationGracePeriodSeconds: 30
+  volumes:
+  - name: ivs-etl-hpc-nas
+    persistentVolumeClaim:
+      claimName: ivs-etl-hpc-nas
+  - emptyDir: {}
+    name: dshm
+status:
+  phase: Running
+  qosClass: Burstable
+  startTime: "2026-03-04T16:23:31Z"
+  podIP: 30.248.144.24
+  hostIP: <node-ip>
+  # containerStatuses：三容器 restartCount 全 0，startedAt 2026-03-04 16:28-16:30
+  # （sglang/be8be80f…、mineru-api/28628a79…、memect/1b74e5b4…，同 mineru-sglang 镜像 digest 25568953…）

@@ -1,0 +1,116 @@
+# =====================================================================
+# MinerU 4.1.3 云平台部署 YAML（v3，2026-11-06；v3=吸收 ivs-llm-chat 实锚：调度注解实值/探针三件套/prometheus 标签）
+# 镜像: registry.internal/ivs-etl/mineru-vllm:4.1.3-cu129
+#       (digest sha256:e28a978ca10c…，权重已烤入镜像，无 NAS 依赖)
+# 形态: API+vLLM 一体单容器（区别于旧版 mineru-api+sglang-server 拆分形态）
+# 用法: kubectl apply -f deployment-mineru-vllm-413.yaml
+# 调度注解: 已按平台标准嵌套形态填实值（源 ivs-llm-chat 工作负载实锚）。
+# 唯一待定: Service 暴露方式——默认 ClusterIP；联调需办公网可达时按注释改 NodePort
+#          或另建 Ingress/域名。
+# =====================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mineru-vllm-413
+  namespace: ivs-etl-hpc-prd
+  labels:
+    app: mineru-vllm-413
+    sub_sys_code: IVS-ETL
+    le: IVS-ETL-LLM-SERVICE      # 平台 UCMDB 校验房规：sub_sys_code+le 必须齐备
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mineru-vllm-413
+  template:
+    metadata:
+      labels:
+        app: mineru-vllm-413
+        sub_sys_code: IVS-ETL
+        le: IVS-ETL-LLM-SERVICE
+        # 平台 metrics 抓取惯例（照抄 chat 工作负载形态）
+        prometheus_port: "8000"
+        prometheus_scheme: http
+        prometheus_scrape: "true"
+      annotations:
+        # 调度注解实值（2026-11-06 双源实锚：chat 工作负载标准嵌套形态；file-parser 用
+        # 独立键形态——平台两种并存，此处采用标准嵌套形态，TODO①已关闭）：
+        hivedscheduler.microsoft.com/pod-scheduling-spec: |
+          leafCellType: NVIDIA-H20
+          virtualCluster: prop-vc-ai-8gpu
+        serverless-pool.kmc/scheduler-name: hivedscheduler-ds-default
+    spec:
+      containers:
+        - name: mineru-api
+          image: registry.internal/ivs-etl/mineru-vllm:4.1.3-cu129
+          imagePullPolicy: IfNotPresent
+          command: ["mineru-kit"]
+          args: ["api-server", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: caas_logs_stdout
+              value: "true"
+            # 显存说明(镜像实锚 2026-11-06)：本镜像无 VLM 显存比例参数——tier 自动探测
+            # 分配(--tier auto 默认)；虚拟卡池如需显式声明可用 MINERU_VIRTUAL_VRAM_SIZE，
+            # 联调时定。扩并发用 args 加 --concurrency N(默认 1)。
+          resources:
+            # nvidia.com/gpu 只在 limits 声明（K8s 扩展资源规范：requests 自动等于 limits）
+            requests:
+              cpu: "8"
+              memory: 24Gi
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "16"
+              memory: 48Gi
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+          # 探针三件套（平台惯例：startupProbe 长容忍 + readiness + liveness；
+          # MinerU 用 HTTP 探针而非 chat 的 TCP——/v1/health 路由已在镜像内实证存在）
+          startupProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 15
+            failureThreshold: 40    # 10 分钟启动容忍（权重烤入镜像+懒加载，快于 NAS 形态）
+          readinessProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 15
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /v1/health, port: 8000 }
+            periodSeconds: 60
+            failureThreshold: 3
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi          # 平台不允许 tmpfs 时改为 emptyDir: {}
+      imagePullSecrets:
+        - name: iap-ivs-etl
+        - name: iap-default
+        - name: default
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mineru-vllm-413
+  namespace: ivs-etl-hpc-prd
+  labels:
+    app: mineru-vllm-413
+    sub_sys_code: IVS-ETL
+    le: IVS-ETL-LLM-SERVICE      # 平台 UCMDB 校验房规：sub_sys_code+le 必须齐备
+spec:
+  type: ClusterIP
+  selector:
+    app: mineru-vllm-413
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+# 可选填空②——联调需办公网可达时，改用 NodePort（示例）：
+#   type: NodePort
+#   ports:
+#     - port: 8000
+#       targetPort: 8000
+#       nodePort: 30800          # 端口值按平台分配惯例调整
